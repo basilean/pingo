@@ -96,6 +96,7 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 	defer wg.Done()
 	log.Println("INFO scan init")
 
+	// TODO: Force to use a certificate?
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
