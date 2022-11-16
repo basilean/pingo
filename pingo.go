@@ -15,18 +15,18 @@ Environment variables needed:
 
 	PINGO_API
 		API endpoint to connect.
-	
+
 	PINGO_TOKEN
 		A valid token to authenticate.
 
 Author:
 
 	Andres Basile
-
 */
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"log"
@@ -35,17 +35,16 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"time"
 	"text/template"
-	"bytes"
+	"time"
 )
 
 // Config is a common place for settings.
 type Config struct {
-	Api	string
-	Token	string
-	Probe	int
-	Scan	int
+	Api   string
+	Token string
+	Probe int
+	Scan  int
 }
 
 // Node is basic data about a target host.
@@ -56,17 +55,17 @@ type Node struct {
 
 // Probe is a channel package used from scan to probe.
 type Probe struct {
-	Node	Node
-	Kill	chan struct{}
-	Seen	bool
+	Node Node
+	Kill chan struct{}
+	Seen bool
 }
 
 // Metric is a channel package used form probe to collect.
 type Metric struct {
-	Node	Node
-	Reply  int
-	Lost   int
-	Time   int64
+	Node  Node
+	Reply int
+	Lost  int
+	Time  int64
 }
 
 // Board is a segment of memory shared between collect and publish.
@@ -104,15 +103,15 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 			},
 		},
 	}
-	request, err := http.NewRequest("GET", config.Api + "/api/v1/nodes/", nil)
+	request, err := http.NewRequest("GET", config.Api+"/api/v1/nodes/", nil)
 	if err != nil {
 		log.Fatal("ERROR scan creating request:", err)
 	}
-	request.Header.Add("Authorization", "Bearer " + config.Token)
+	request.Header.Add("Authorization", "Bearer "+config.Token)
 
 	metric := Metric{
 		Node: Node{
-			Name: "API",
+			Name:   "API",
 			Target: config.Api,
 		},
 	}
@@ -121,7 +120,7 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 	defer ticker.Stop()
 	known := make(map[string]*Probe)
 
-	for start := time.Now(); true; start = <- ticker.C {
+	for start := time.Now(); true; start = <-ticker.C {
 		reply, err := client.Do(request)
 		if err != nil {
 			log.Println("ERROR scan performing request:", err)
@@ -151,12 +150,13 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 			node := Node{}
 			for _, addr := range item.Status.Addresses {
 				switch addr.Type {
-					case "Hostname":
-						node.Name = addr.Address
-					case "InternalIP":
-						node.Target = addr.Address + ":" + strconv.Itoa(item.Status.DaemonEndpoints.KubeletEndpoint.Port)
-					default:
-						log.Println("ERROR scan address type:", addr.Type)
+				case "Hostname":
+					node.Name = addr.Address
+				// TODO: Handle and prefer ExternalIP.
+				case "InternalIP":
+					node.Target = addr.Address + ":" + strconv.Itoa(item.Status.DaemonEndpoints.KubeletEndpoint.Port)
+				default:
+					log.Println("ERROR scan address type:", addr.Type)
 				}
 			}
 			val, exists := known[node.Name]
@@ -167,12 +167,12 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 				exists = false
 			}
 			if !exists {
-					known[node.Name] = &Probe{
-						Node: node,
-						Kill: make(chan struct{}),
-					}
-					log.Println("INFO scan starting new probe:", node.Name)
-					go probe(config.Probe, metrics, known[node.Name])	
+				known[node.Name] = &Probe{
+					Node: node,
+					Kill: make(chan struct{}),
+				}
+				log.Println("INFO scan starting new probe:", node.Name)
+				go probe(config.Probe, metrics, known[node.Name])
 			}
 			known[node.Name].Seen = true
 		}
@@ -192,30 +192,30 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 // Probe is a neverends loop that keeps connecting to node.
 func probe(interval int, metrics chan Metric, node *Probe) {
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
-	timeout := time.Duration(interval - 1) * time.Second
+	timeout := time.Duration(interval-1) * time.Second
 	metric := Metric{
-		Node:   node.Node,
+		Node: node.Node,
 	}
 	log.Println("INFO probe start:", node.Node.Name)
 	for {
 		select {
-			case <- node.Kill:
-				log.Println("INFO probe stop:", node.Node.Name)
-				ticker.Stop()
-				return
-			case start := <-ticker.C:
-				// 3-Way Handshake: Syn ->, <- Syn/Ack, Ack ->
-				conn, err := net.DialTimeout("tcp4", node.Node.Target, timeout)
-				if err != nil {
-					metric.Lost++
-				} else {
-					metric.Time += time.Since(start).Milliseconds()
-					metric.Reply++
-					// 3-Way Fin: Fin/Ack ->, <- Fin/Ack, Ack ->
-					// conn.(*net.TCPConn).SetLinger(0) // Force Rst/Ack instead.
-					conn.Close()
-				}
-				metrics <- metric
+		case <-node.Kill:
+			log.Println("INFO probe stop:", node.Node.Name)
+			ticker.Stop()
+			return
+		case start := <-ticker.C:
+			// 3-Way Handshake: Syn ->, <- Syn/Ack, Ack ->
+			conn, err := net.DialTimeout("tcp4", node.Node.Target, timeout)
+			if err != nil {
+				metric.Lost++
+			} else {
+				metric.Time += time.Since(start).Milliseconds()
+				metric.Reply++
+				// 3-Way Fin: Fin/Ack ->, <- Fin/Ack, Ack ->
+				// conn.(*net.TCPConn).SetLinger(0) // Force Rst/Ack instead.
+				conn.Close()
+			}
+			metrics <- metric
 		}
 	}
 }
@@ -250,35 +250,35 @@ pingo_time{name="{{ $val.Node.Name }}",target="{{ $val.Node.Target }}"} {{ $val.
 	known := make(map[string]Metric)
 	for {
 		select {
-			case metric := <- in:
-				known[metric.Node.Name] = metric
-			case _ = <- ticker.C:
-				board.Lock()
-				board.Reset()
-				err := t.Execute(board, known)
-				if err != nil {
-					log.Println("ERROR collect executing template:", err)
-				}
-				board.Unlock()
-				// TODO: a better way to handle it.
-				api, _ := known["API"]
-				known = make(map[string]Metric)
-				known["API"] = api
+		case metric := <-in:
+			known[metric.Node.Name] = metric
+		case _ = <-ticker.C:
+			board.Lock()
+			board.Reset()
+			err := t.Execute(board, known)
+			if err != nil {
+				log.Println("ERROR collect executing template:", err)
+			}
+			board.Unlock()
+			// TODO: a better way to handle it.
+			api, _ := known["API"]
+			known = make(map[string]Metric)
+			known["API"] = api
 		}
 	}
 }
 
 func publish(wg *sync.WaitGroup, board *Board) {
 	defer wg.Done()
-	http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request){
+	http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
 		board.RLock()
 		w.Write(board.Bytes())
 		board.RUnlock()
 	})
-  err := http.ListenAndServe(":8080", nil)
-  if err != nil {
-  	log.Fatal("ERROR export creating server:", err)
-  }
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal("ERROR export creating server:", err)
+	}
 }
 
 func mustEnv(name string, fatal string) string {
@@ -299,9 +299,9 @@ func couldEnv(name string, def int) int {
 
 func main() {
 	config := Config{
-		Api: mustEnv("PINGO_API", "FATAL environment variable PINGO_API not defined."),
+		Api:   mustEnv("PINGO_API", "FATAL environment variable PINGO_API not defined."),
 		Token: mustEnv("PINGO_TOKEN", "FATAL environment variable PINGO_TOKEN not defined."),
-		Scan: couldEnv("PINGO_SCAN", 60),
+		Scan:  couldEnv("PINGO_SCAN", 60),
 		Probe: couldEnv("PINGO_PROBE", 15),
 	}
 	log.Println("INFO config api:", config.Api)
@@ -311,7 +311,6 @@ func main() {
 	metrics := make(chan Metric, 32)
 	board := Board{}
 	go scan(&wg, &config, nodes, metrics)
-//	go aim(&wg, &config, nodes, metrics)
 	go collect(&wg, &config, metrics, &board)
 	go publish(&wg, &board)
 	wg.Add(1)
