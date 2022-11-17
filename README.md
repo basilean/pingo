@@ -1,7 +1,9 @@
 # PinGo
+
 ![GitHub](https://img.shields.io/github/license/basilean/pingo)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/basilean/pingo)
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/basilean/pingo/CodeQL)
+[![CodeQL](https://github.com/basilean/pingo/actions/workflows/codeql.yml/badge.svg)](https://github.com/basilean/pingo/actions/workflows/codeql.yml)
+[![Docker](https://github.com/basilean/pingo/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/basilean/pingo/actions/workflows/docker-publish.yml)
 
 ## Overview
 PinGo is simple application to measure network availability from a source (where it runs) to targets nodes (acquired from Kubernetes cluster).
