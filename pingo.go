@@ -19,6 +19,9 @@ Environment variables needed:
 	PINGO_TOKEN
 		A valid token to authenticate.
 
+	PINGO_CA
+		The API endpoint Certificate Authority PEM format as base64.
+
 Author:
 
 	Andres Basile
@@ -28,6 +31,8 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net"
@@ -43,6 +48,7 @@ import (
 type Config struct {
 	Api   string
 	Token string
+	Ca    []byte
 	Probe int
 	Scan  int
 }
@@ -53,7 +59,7 @@ type Node struct {
 	Target string
 }
 
-// Probe is a channel package used from scan to probe.
+// Probe is used by scan to launch and handle a probe.
 type Probe struct {
 	Node Node
 	Kill chan struct{}
@@ -96,11 +102,12 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 	defer wg.Done()
 	log.Println("INFO scan init")
 
-	// TODO: Force to use a certificate?
+	cert := x509.NewCertPool()
+	cert.AppendCertsFromPEM(config.Ca)
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				RootCAs: cert,
 			},
 		},
 	}
@@ -149,13 +156,18 @@ func scan(wg *sync.WaitGroup, config *Config, out chan Node, metrics chan Metric
 
 		for _, item := range nodes.Items {
 			node := Node{}
+			external := false
 			for _, addr := range item.Status.Addresses {
 				switch addr.Type {
 				case "Hostname":
 					node.Name = addr.Address
-				// TODO: Handle and prefer ExternalIP.
 				case "InternalIP":
+					if !external {
+						node.Target = addr.Address + ":" + strconv.Itoa(item.Status.DaemonEndpoints.KubeletEndpoint.Port)
+					}
+				case "ExternalIP":
 					node.Target = addr.Address + ":" + strconv.Itoa(item.Status.DaemonEndpoints.KubeletEndpoint.Port)
+					external = true
 				default:
 					log.Println("ERROR scan address type:", addr.Type)
 				}
@@ -261,7 +273,6 @@ pingo_time{name="{{ $val.Node.Name }}",target="{{ $val.Node.Target }}"} {{ $val.
 				log.Println("ERROR collect executing template:", err)
 			}
 			board.Unlock()
-			// TODO: a better way to handle it.
 			api, _ := known["API"]
 			known = make(map[string]Metric)
 			known["API"] = api
@@ -280,6 +291,9 @@ func publish(wg *sync.WaitGroup, board *Board) {
 	if err != nil {
 		log.Fatal("ERROR export creating server:", err)
 	}
+}
+
+func b64Env() {
 }
 
 func mustEnv(name string, fatal string) string {
@@ -305,6 +319,12 @@ func main() {
 		Scan:  couldEnv("PINGO_SCAN", 60),
 		Probe: couldEnv("PINGO_PROBE", 15),
 	}
+	pem, err := base64.StdEncoding.DecodeString(mustEnv("PINGO_CA", "FATAL environment variable PINGO_CA not defined."))
+	if err != nil {
+		log.Fatal("FATAL PINGO_CA base64 string can not be decoded:", err)
+	}
+	config.Ca = pem
+
 	log.Println("INFO config api:", config.Api)
 
 	var wg sync.WaitGroup

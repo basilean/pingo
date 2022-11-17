@@ -22,12 +22,13 @@ graph TD
     A(PinGo) -->|goroutine| B(Scan)
     A -->|goroutine| C(Collect)
     A -->|goroutine| G(HTTP Server)
-    B <-->|get nodes| D{API}
+    B <-.->|get nodes| D{API}
     B -->|goroutine| E(Probe)
-    E -->|send channel| C
+    E -->|metrics channel| C
     C -->|render template| F[Board]
     F -->|read buffer| G
-    G -->|write metrics| H{cient}
+    G -.->|write metrics| H{cient}
+    B -->|kill channel| E
 ```
 
 Metrics are Prometheus formatted and exported through HTTP in order to be collected by third party monitoring.
@@ -36,6 +37,7 @@ Metrics are Prometheus formatted and exported through HTTP in order to be collec
 ```
 export PINGO_API=https://KUBERNETES_API:PORT
 export PINGO_TOKEN=SERVICE_ACCOUNT_TOKEN
+export PINGO_CA=`echo "" | openssl s_client -connect KUBERNETES_API:PORT -prexit 2>/dev/null | sed -n -e '/BEGIN\ CERTIFICATE/,/END\ CERTIFICATE/ p' | base64 -w0`
 ./pingo
 ```
 
