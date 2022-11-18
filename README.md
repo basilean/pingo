@@ -6,11 +6,11 @@
 [![Docker](https://github.com/basilean/pingo/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/basilean/pingo/actions/workflows/docker-publish.yml)
 
 ## Overview
-PinGo is simple application to measure network availability from a source (where it runs) to targets nodes (acquired from Kubernetes cluster).
+PinGo is a simple application to measure network availability from a source (where it runs) to target nodes (acquired from Kubernetes API).
 
 ## How it Works?
-It connects to a Kubernetes API in order to get a list of nodes with their IP addresses and Kubelet ports.
-For each node, one probe is created that will loop with an interval, trying to establish a TCP connection, measuring replies, time and lost packages.
+It keeps connecting to a Kubernetes API to get a list of nodes with their IP addresses and [Kubelet port](https://kubernetes.io/docs/reference/ports-and-protocols/) (60s default).
+For each node, one probe is created and handled, this will loop with an interval (15s default), trying to establish a TCP connection (3 way handshake), measuring reply, time and lost.
 ```mermaid
 graph TD
     style A fill:#0e0,stroke:#010,stroke-width:3px;
@@ -33,20 +33,36 @@ graph TD
     B -->|kill channel| E
 ```
 
-Metrics are Prometheus formatted and exported through HTTP in order to be collected by third party monitoring.
+Metrics are [Prometheus formatted](https://prometheus.io/docs/instrumenting/exposition_formats/) and published through HTTP in order to be collected by third party monitoring.
 
 ## Example
+1. Set Kubernetes API Endpoint
 ```
 export PINGO_API=https://KUBERNETES_API:PORT
+```
+2. Set Authentication Token
+
+:warning: *Service Account must have a bind to a cluster role allowing **get** and **list** over objects **nodes**.*
+```
 export PINGO_TOKEN=SERVICE_ACCOUNT_TOKEN
+```
+3. Set API Certificate Authority as Base64
+```
+export PINGO_CA=BASE64_KUBERNETES_API_CERTIFICATE
+```
+:information_source: *To get API certificate use this command after replace KUBERNETES_API:PORT.*
+```
 export PINGO_CA=`echo "" | openssl s_client -connect KUBERNETES_API:PORT -prexit 2>/dev/null | sed -n -e '/BEGIN\ CERTIFICATE/,/END\ CERTIFICATE/ p' | base64 -w0`
+```
+4. Run the Application
+```
 ./pingo
 ```
 
 ## Build
 No external dependencies, just builtin Go libraries.
 ```
-go build -o pingo pingo.go
+CGO_ENABLED=0 go build -o pingo pingo.go
 ```
 
 ## History

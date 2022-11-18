@@ -3,7 +3,7 @@ PinGo
 
 GNU/GPL v3
 
-Pingo produces Prometheus metrics about network between sites or clusters.
+PinGo produces Prometheus metrics about network between sites or clusters.
 It connects to a Kubernetes API with a token and gets a list of cluster nodes.
 For each node, it will run a coroutine that probes it.
 
@@ -233,6 +233,7 @@ func probe(interval int, metrics chan Metric, node *Probe) {
 	}
 }
 
+// Collects receives metrics from probes and renders web page.
 func collect(wg *sync.WaitGroup, config *Config, in chan Metric, board *Board) {
 	defer wg.Done()
 	log.Println("INFO collect init")
@@ -280,6 +281,7 @@ pingo_time{name="{{ $val.Node.Name }}",target="{{ $val.Node.Target }}"} {{ $val.
 	}
 }
 
+// Publish wraps handle func so it can access share memory.
 func publish(wg *sync.WaitGroup, board *Board) {
 	defer wg.Done()
 	http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
@@ -293,9 +295,7 @@ func publish(wg *sync.WaitGroup, board *Board) {
 	}
 }
 
-func b64Env() {
-}
-
+// Must Environment variables.
 func mustEnv(name string, fatal string) string {
 	env := os.Getenv(name)
 	if len(env) < 1 {
@@ -304,6 +304,7 @@ func mustEnv(name string, fatal string) string {
 	return env
 }
 
+// Could Environment variable.
 func couldEnv(name string, def int) int {
 	env, err := strconv.Atoi(os.Getenv(name))
 	if err != nil || env < 2 {
@@ -324,7 +325,6 @@ func main() {
 		log.Fatal("FATAL PINGO_CA base64 string can not be decoded:", err)
 	}
 	config.Ca = pem
-
 	log.Println("INFO config api:", config.Api)
 
 	var wg sync.WaitGroup
